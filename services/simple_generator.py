@@ -48,15 +48,38 @@ class SimpleGenerator:
         
         # Création de l'environnement virtuel
         venv_path = os.path.join(project_path, ".venv")
-        python_cmd = f"python{version}"
+        
+        # Essayer plusieurs commandes Python dans l'ordre de préférence
+        python_commands = [
+            f"python{version}",      # python3.9
+            f"python{version[:3]}", # python3.9 (si version = 3.9.24)
+            "python3",               # python3 (version par défaut)
+            "python"                 # python (version par défaut)
+        ]
+        
+        python_cmd = None
+        for cmd in python_commands:
+            try:
+                # Tester si la commande existe
+                result = subprocess.run([cmd, "--version"], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    python_cmd = cmd
+                    self.log_callback(f"✅ Python trouvé : {cmd}")
+                    break
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        
+        if not python_cmd:
+            # Dernier recours : utiliser python3
+            python_cmd = "python3"
+            self.log_callback(f"⚠️  Utilisation de python3 par défaut")
         
         try:
             subprocess.run([python_cmd, "-m", "venv", venv_path], check=True)
-            self.log_callback(f"✅ Environnement virtuel créé : {venv_path}")
-        except subprocess.CalledProcessError:
-            # Fallback sur python3 si python{version} n'existe pas
-            subprocess.run(["python3", "-m", "venv", venv_path], check=True)
-            self.log_callback(f"✅ Environnement virtuel créé (fallback python3) : {venv_path}")
+            self.log_callback(f"✅ Environnement virtuel créé avec {python_cmd} : {venv_path}")
+        except subprocess.CalledProcessError as e:
+            self.log_callback(f"❌ Erreur lors de la création de l'environnement virtuel : {e}")
+            raise
         
         # Détermination du pip selon l'OS
         if os.name == 'nt':  # Windows

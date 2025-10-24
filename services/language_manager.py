@@ -39,8 +39,38 @@ class LanguageManager:
     def is_version_installed(lang, version):
         try:
             if lang == "Python":
-                result = subprocess.run(["python" + version[:3], "--version"], capture_output=True)
-                return result.returncode == 0
+                # Essayer plusieurs méthodes pour détecter Python
+                python_commands = [
+                    f"python{version[:3]}",  # python3.9
+                    f"python{version}",      # python3.9.24
+                    "python3",               # python3 (version par défaut)
+                    "python"                 # python (version par défaut)
+                ]
+                
+                for cmd in python_commands:
+                    try:
+                        result = subprocess.run([cmd, "--version"], 
+                                              capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            # Vérifier que la version correspond
+                            version_output = result.stdout.strip()
+                            if version in version_output or version[:3] in version_output:
+                                return True
+                    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                        continue
+                
+                # Vérifier avec le chemin complet si disponible
+                full_path = LanguageManager.get_installation_path(lang, version)
+                if full_path and os.path.exists(full_path):
+                    try:
+                        result = subprocess.run([full_path, "--version"], 
+                                              capture_output=True, text=True, timeout=5)
+                        return result.returncode == 0
+                    except:
+                        pass
+                
+                return False
+                
             elif lang == "PHP":
                 if shutil.which("php"):
                     out = subprocess.check_output(["php", "-v"], text=True)

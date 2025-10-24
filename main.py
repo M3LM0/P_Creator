@@ -17,8 +17,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.lang_manager = LanguageManager()
-        self.generator = SimpleGenerator(log_callback=self.log)
-        self.last_created_project = None  # Chemin du dernier projet créé
+        self.generator = SimpleGenerator(log_callback=self.log)  # Chemin du dernier projet créé
         self.init_ui()
 
     def init_ui(self):
@@ -77,41 +76,6 @@ class MainWindow(QMainWindow):
         self.create_btn.clicked.connect(self.create_project)
         layout.addWidget(self.create_btn)
         
-        # Bouton pour ouvrir dans Cursor (initialement caché)
-        self.open_cursor_btn = QPushButton("🚀 Ouvrir dans Cursor")
-        self.open_cursor_btn.clicked.connect(self.open_in_cursor)
-        self.open_cursor_btn.setVisible(False)
-        self.open_cursor_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #007ACC;
-                color: white;
-                font-weight: bold;
-                padding: 10px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #005A9E;
-            }
-        """)
-        layout.addWidget(self.open_cursor_btn)
-        
-        # Bouton alternatif pour ouvrir le dossier (initialement caché)
-        self.open_folder_btn = QPushButton("📁 Ouvrir le Dossier")
-        self.open_folder_btn.clicked.connect(self.open_folder)
-        self.open_folder_btn.setVisible(False)
-        self.open_folder_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                font-weight: bold;
-                padding: 10px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
-        layout.addWidget(self.open_folder_btn)
         
         # Console
         self.console = QTextEdit()
@@ -415,9 +379,6 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            # Cacher les boutons d'ouverture si on crée un nouveau projet
-            self.open_cursor_btn.setVisible(False)
-            self.open_folder_btn.setVisible(False)
             
             self.log(f"🚀 Création du projet '{name}'...")
             self.log(f"📁 Chemin : {path}")
@@ -437,14 +398,6 @@ class MainWindow(QMainWindow):
             self.log(f"📂 Dossier : {project_path}")
             self.log(f"🎯 Votre projet est prêt à être utilisé !")
             
-            # Stocker le chemin du projet créé
-            self.last_created_project = project_path
-            
-            # Afficher les boutons d'ouverture
-            self.open_cursor_btn.setVisible(True)
-            self.open_cursor_btn.setText(f"🚀 Ouvrir '{name}' dans Cursor")
-            self.open_folder_btn.setVisible(True)
-            self.open_folder_btn.setText(f"📁 Ouvrir le dossier '{name}'")
             
             # Message de succès
             QMessageBox.information(
@@ -452,7 +405,7 @@ class MainWindow(QMainWindow):
                 "Succès", 
                 f"Projet '{name}' créé avec succès !\n\n"
                 f"Chemin : {project_path}\n\n"
-                f"Cliquez sur le bouton 'Ouvrir dans Cursor' pour commencer à coder !"
+                f"Votre projet est prêt à être utilisé !"
             )
             
         except Exception as e:
@@ -460,170 +413,6 @@ class MainWindow(QMainWindow):
             self.log(f"❌ Erreur : {str(e)}")
             QMessageBox.critical(self, "Erreur", f"Erreur lors de la création :\n{str(e)}")
 
-    def open_in_cursor(self):
-        """Ouvre Cursor dans le dossier du projet créé avec gestion d'erreurs améliorée"""
-        if not self.last_created_project:
-            QMessageBox.warning(self, "Erreur", "Aucun projet créé récemment")
-            return
-        
-        try:
-            import subprocess
-            import platform
-            import time
-            
-            self.log(f"🚀 Ouverture de Cursor dans : {self.last_created_project}")
-            
-            # Détecter l'OS et utiliser la bonne commande
-            system = platform.system()
-            success = False
-            
-            if system == "Darwin":  # macOS
-                # Méthode 1: Commande cursor (si installé via npm)
-                try:
-                    self.log("🔍 Tentative avec la commande 'cursor'...")
-                    result = subprocess.run(
-                        ["cursor", self.last_created_project], 
-                        check=True, 
-                        timeout=10,
-                        capture_output=True,
-                        text=True
-                    )
-                    self.log("✅ Cursor ouvert avec succès (commande cursor) !")
-                    success = True
-                except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
-                    self.log(f"⚠️  Commande 'cursor' échouée : {str(e)}")
-                    
-                    # Méthode 2: Ouvrir avec l'application Cursor
-                    try:
-                        self.log("🔍 Tentative avec l'application Cursor...")
-                        subprocess.run(
-                            ["open", "-a", "Cursor", self.last_created_project], 
-                            check=True,
-                            timeout=10
-                        )
-                        self.log("✅ Cursor ouvert avec succès (application) !")
-                        success = True
-                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e2:
-                        self.log(f"⚠️  Application Cursor échouée : {str(e2)}")
-                        
-                        # Méthode 3: Ouvrir le dossier dans le Finder
-                        try:
-                            self.log("🔍 Ouverture du dossier dans le Finder...")
-                            subprocess.run(["open", self.last_created_project], check=True)
-                            self.log("✅ Dossier ouvert dans le Finder !")
-                            self.log("💡 Vous pouvez maintenant glisser-déposer le dossier dans Cursor")
-                            success = True
-                        except Exception as e3:
-                            self.log(f"❌ Impossible d'ouvrir le dossier : {str(e3)}")
-            
-            elif system == "Windows":
-                # Windows
-                try:
-                    subprocess.run(["cursor", self.last_created_project], check=True, timeout=10)
-                    self.log("✅ Cursor ouvert avec succès !")
-                    success = True
-                except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                    # Fallback: ouvrir le dossier dans l'explorateur
-                    subprocess.run(["explorer", self.last_created_project], check=True)
-                    self.log("✅ Dossier ouvert dans l'Explorateur !")
-                    success = True
-            
-            else:  # Linux
-                try:
-                    subprocess.run(["cursor", self.last_created_project], check=True, timeout=10)
-                    self.log("✅ Cursor ouvert avec succès !")
-                    success = True
-                except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                    # Fallback: ouvrir le dossier dans le gestionnaire de fichiers
-                    subprocess.run(["xdg-open", self.last_created_project], check=True)
-                    self.log("✅ Dossier ouvert dans le gestionnaire de fichiers !")
-                    success = True
-            
-            if success:
-                # Masquer le bouton après utilisation
-                self.open_cursor_btn.setVisible(False)
-                
-                # Afficher un message d'aide
-                QMessageBox.information(
-                    self,
-                    "Projet ouvert",
-                    "Le projet a été ouvert !\n\n"
-                    "Si Cursor ne s'est pas ouvert automatiquement :\n"
-                    "1. Ouvrez Cursor manuellement\n"
-                    "2. Utilisez File > Open Folder\n"
-                    "3. Sélectionnez le dossier du projet"
-                )
-            else:
-                raise Exception("Toutes les méthodes d'ouverture ont échoué")
-            
-        except FileNotFoundError:
-            self.log("❌ Cursor n'est pas installé ou pas dans le PATH")
-            QMessageBox.warning(
-                self, 
-                "Cursor non trouvé", 
-                "Cursor n'est pas installé ou pas dans le PATH.\n\n"
-                "Solutions :\n"
-                "1. Installez Cursor depuis : https://cursor.sh/\n"
-                "2. Ou ouvrez manuellement le dossier :\n" + self.last_created_project
-            )
-        except Exception as e:
-            self.log(f"❌ Erreur lors de l'ouverture : {str(e)}")
-            QMessageBox.critical(
-                self, 
-                "Erreur", 
-                f"Impossible d'ouvrir Cursor automatiquement.\n\n"
-                f"Solutions manuelles :\n"
-                f"1. Ouvrez Cursor\n"
-                f"2. File > Open Folder\n"
-                f"3. Sélectionnez : {self.last_created_project}\n\n"
-                f"Ou copiez ce chemin :\n{self.last_created_project}"
-            )
-
-    def open_folder(self):
-        """Ouvre le dossier du projet dans le gestionnaire de fichiers"""
-        if not self.last_created_project:
-            QMessageBox.warning(self, "Erreur", "Aucun projet créé récemment")
-            return
-        
-        try:
-            import subprocess
-            import platform
-            
-            self.log(f"📁 Ouverture du dossier : {self.last_created_project}")
-            
-            system = platform.system()
-            
-            if system == "Darwin":  # macOS
-                subprocess.run(["open", self.last_created_project], check=True)
-                self.log("✅ Dossier ouvert dans le Finder !")
-                self.log("💡 Vous pouvez maintenant glisser-déposer le dossier dans Cursor")
-            elif system == "Windows":
-                subprocess.run(["explorer", self.last_created_project], check=True)
-                self.log("✅ Dossier ouvert dans l'Explorateur !")
-            else:  # Linux
-                subprocess.run(["xdg-open", self.last_created_project], check=True)
-                self.log("✅ Dossier ouvert dans le gestionnaire de fichiers !")
-            
-            # Masquer le bouton après utilisation
-            self.open_folder_btn.setVisible(False)
-            
-            QMessageBox.information(
-                self,
-                "Dossier ouvert",
-                "Le dossier du projet a été ouvert !\n\n"
-                "Pour ouvrir dans Cursor :\n"
-                "1. Glissez-déposez le dossier dans Cursor\n"
-                "2. Ou utilisez File > Open Folder dans Cursor"
-            )
-            
-        except Exception as e:
-            self.log(f"❌ Erreur lors de l'ouverture du dossier : {str(e)}")
-            QMessageBox.critical(
-                self,
-                "Erreur",
-                f"Impossible d'ouvrir le dossier :\n{str(e)}\n\n"
-                f"Chemin du projet :\n{self.last_created_project}"
-            )
 
     def log(self, message):
         self.console.append(message)

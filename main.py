@@ -17,7 +17,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.lang_manager = LanguageManager()
-        self.generator = SimpleGenerator(log_callback=self.log)  # Chemin du dernier projet créé
+        self.generator = SimpleGenerator(log_callback=self.log)
         self.init_ui()
 
     def init_ui(self):

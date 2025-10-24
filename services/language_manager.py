@@ -83,57 +83,6 @@ class LanguageManager:
             return False
         return False
 
-    @staticmethod
-    def install_version(lang, version):
-        print(f"🛠 Installation de {lang} {version}...")
-        try:
-            if lang == "Python":
-                LanguageManager.ensure_pyenv()
-                LanguageManager._run(["pyenv", "install", "-s", version])
-            elif lang == "PHP":
-                LanguageManager.ensure_brew()
-                LanguageManager._run(["brew", "install", f"php@{version}"])
-            elif lang == "JavaScript":
-                LanguageManager.ensure_nvm()
-                ver_num = version.split()[1]
-                LanguageManager._run(f"source ~/.nvm/nvm.sh && nvm install {ver_num}", shell=True)
-                LanguageManager._run(f"source ~/.nvm/nvm.sh && nvm alias default {ver_num}", shell=True)
-            print(f"✅ {lang} {version} installé.")
-            return True
-        except Exception as e:
-            print("❌ Erreur d'installation :", e)
-            return False
-
-    @staticmethod
-    def ensure_brew():
-        if not shutil.which("brew"):
-            print("➡️ Installation de Homebrew…")
-            subprocess.run(
-                '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
-                shell=True, check=False)
-            os.environ["PATH"] += ":/opt/homebrew/bin"
-        else:
-            print("✅ Homebrew déjà installé.")
-
-    @staticmethod
-    def ensure_pyenv():
-        if not shutil.which("pyenv"):
-            LanguageManager.ensure_brew()
-            print("➡️ Installation de pyenv…")
-            LanguageManager._run(["brew", "install", "pyenv"])
-        else:
-            print("✅ pyenv déjà installé.")
-
-    @staticmethod
-    def ensure_nvm():
-        nvm_path = os.path.expanduser("~/.nvm/nvm.sh")
-        if not shutil.which("nvm") and not os.path.exists(nvm_path):
-            print("➡️ Installation de nvm…")
-            subprocess.run(
-                'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash',
-                shell=True, check=False)
-        else:
-            print("✅ nvm déjà installé.")
 
     @staticmethod
     def get_installation_path(lang, version):

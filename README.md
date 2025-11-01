@@ -122,7 +122,24 @@ P_Creator/
 │   ├── language_manager.py  # Gestion des langages
 │   └── simple_generator.py  # Générateur de projets
 ├── run_simple.sh            # Script de lancement
+├── build_executable.sh      # Script de build PyInstaller
+├── p_creator.spec           # Configuration PyInstaller
 └── README.md               # Documentation
+```
+
+### Création d'un Exécutable
+
+Pour créer un exécutable avec PyInstaller :
+
+```bash
+# Installer PyInstaller (si pas déjà fait)
+.venv/bin/python -m pip install pyinstaller
+
+# Construire l'exécutable
+./build_executable.sh
+
+# L'exécutable sera créé dans dist/P_Creator
+./dist/P_Creator
 ```
 
 ### Ajout d'un Nouveau Langage

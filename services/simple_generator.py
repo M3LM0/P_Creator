@@ -5,7 +5,9 @@ Crée des projets basiques avec environnement virtuel automatique
 
 import os
 import subprocess
-from typing import Dict, List
+import shutil
+import re
+from typing import Dict, List, Optional
 
 class SimpleGenerator:
     """Générateur simple de projets"""
@@ -14,7 +16,29 @@ class SimpleGenerator:
         self.supported_languages = ["Python", "JavaScript", "PHP"]
         self.log_callback = log_callback or print
     
-    def create_project(self, name: str, path: str, language: str, version: str) -> str:
+    @staticmethod
+    def _normalize_python_version(version_str: str) -> str:
+        """
+        Normalise une version Python en major.minor
+        Exemples: "3.13.0" -> "3.13", "3.9" -> "3.9", "3.10.5" -> "3.10"
+        """
+        match = re.search(r'^(\d+)\.(\d+)', version_str)
+        if match:
+            return f"{match.group(1)}.{match.group(2)}"
+        return version_str
+    
+    @staticmethod
+    def _extract_python_version_from_output(output: str) -> Optional[str]:
+        """
+        Extrait la version Python depuis la sortie de 'python --version'
+        Exemples: "Python 3.13.0" -> "3.13", "Python 3.9.5" -> "3.9"
+        """
+        match = re.search(r'(\d+\.\d+)', output)
+        if match:
+            return match.group(1)
+        return None
+    
+    def create_project(self, name: str, path: str, language: str, version: str, copy_cursor_rules: bool = False) -> str:
         """
         Crée un projet simple avec environnement virtuel
         
@@ -23,10 +47,14 @@ class SimpleGenerator:
             path: Chemin de base
             language: Langage de programmation
             version: Version du langage
+            copy_cursor_rules: Copier les règles Cursor (uniquement pour Python)
             
         Returns:
             Chemin complet du projet créé
         """
+        # Créer le dossier de base s'il n'existe pas
+        os.makedirs(path, exist_ok=True)
+        
         # Chemin complet du projet
         project_path = os.path.join(path, name)
         
@@ -34,7 +62,7 @@ class SimpleGenerator:
         os.makedirs(project_path, exist_ok=True)
         
         if language == "Python":
-            return self._create_python_project(project_path, version)
+            return self._create_python_project(project_path, version, copy_cursor_rules)
         elif language == "JavaScript":
             return self._create_js_project(project_path, version)
         elif language == "PHP":
@@ -42,29 +70,43 @@ class SimpleGenerator:
         else:
             raise ValueError(f"Langage non supporté : {language}")
     
-    def _create_python_project(self, project_path: str, version: str) -> str:
+    def _create_python_project(self, project_path: str, version: str, copy_cursor_rules: bool = False) -> str:
         """Crée un projet Python avec environnement virtuel"""
         self.log_callback(f"🐍 Création du projet Python {version}...")
+        
+        # Création de la structure Python standard
+        self._create_python_structure(project_path)
+        
+        # Copie des règles Cursor si demandée
+        if copy_cursor_rules:
+            self._copy_cursor_rules(project_path)
         
         # Création de l'environnement virtuel
         venv_path = os.path.join(project_path, ".venv")
         
+        # Normaliser la version pour construire les commandes
+        normalized_version = self._normalize_python_version(version)
+        
         # Essayer plusieurs commandes Python dans l'ordre de préférence
         python_commands = [
-            f"python{version}",      # python3.9
-            f"python{version[:3]}", # python3.9 (si version = 3.9.24)
-            "python3",               # python3 (version par défaut)
-            "python"                 # python (version par défaut)
+            f"python{version}",           # python3.9.24
+            f"python{normalized_version}", # python3.9
+            "python3",                    # python3 (version par défaut)
+            "python"                      # python (version par défaut)
         ]
         
         python_cmd = None
+        detected_version = None
         for cmd in python_commands:
             try:
-                # Tester si la commande existe
-                result = subprocess.run([cmd, "--version"], capture_output=True, timeout=5)
+                # Tester si la commande existe et lire stdout + stderr
+                result = subprocess.run([cmd, "--version"], capture_output=True, text=True, timeout=5)
                 if result.returncode == 0:
+                    # Combiner stdout et stderr pour la détection
+                    output = (result.stdout or '') + (result.stderr or '')
+                    detected_version = self._extract_python_version_from_output(output)
                     python_cmd = cmd
-                    self.log_callback(f"✅ Python trouvé : {cmd}")
+                    self.log_callback(f"✅ Python trouvé : {cmd} (version détectée: {detected_version})")
                     break
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 continue
@@ -72,7 +114,25 @@ class SimpleGenerator:
         if not python_cmd:
             # Dernier recours : utiliser python3
             python_cmd = "python3"
+            try:
+                result = subprocess.run([python_cmd, "--version"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    output = (result.stdout or '') + (result.stderr or '')
+                    detected_version = self._extract_python_version_from_output(output)
+            except:
+                pass
             self.log_callback(f"⚠️  Utilisation de python3 par défaut")
+        
+        # Créer le fichier .python-version avec la version réellement détectée
+        if detected_version:
+            version_for_file = detected_version
+        else:
+            # Fallback sur la version normalisée de l'entrée utilisateur
+            version_for_file = normalized_version
+        
+        with open(os.path.join(project_path, ".python-version"), "w") as f:
+            f.write(version_for_file)
+        self.log_callback(f"📝 Fichier .python-version créé avec la version {version_for_file}")
         
         try:
             subprocess.run([python_cmd, "-m", "venv", venv_path], check=True)
@@ -81,12 +141,10 @@ class SimpleGenerator:
             self.log_callback(f"❌ Erreur lors de la création de l'environnement virtuel : {e}")
             raise
         
-        # Détermination du pip selon l'OS
+        # Détermination du python selon l'OS
         if os.name == 'nt':  # Windows
-            pip_path = os.path.join(venv_path, "Scripts", "pip.exe")
             python_path = os.path.join(venv_path, "Scripts", "python.exe")
         else:  # Unix/Linux/macOS
-            pip_path = os.path.join(venv_path, "bin", "pip")
             python_path = os.path.join(venv_path, "bin", "python")
         
         # Création des fichiers de base
@@ -99,13 +157,22 @@ class SimpleGenerator:
         self._create_check_script(project_path, venv_path)
         
         # Activation automatique et installation des dépendances
-        self._activate_and_install_dependencies(project_path, venv_path, pip_path)
+        self._activate_and_install_dependencies(project_path, venv_path, python_path)
         
         return project_path
     
     def _create_js_project(self, project_path: str, version: str) -> str:
         """Crée un projet JavaScript avec package.json"""
         self.log_callback(f"🟨 Création du projet JavaScript Node.js {version}...")
+        
+        # Extraire le numéro de version majeur pour engines.node
+        # Exemples: "Node 18" -> "18", "18" -> "18", "Node 20.10.0" -> "20"
+        node_major = None
+        match = re.search(r'\d+', version)
+        if match:
+            node_major = match.group(0)
+        else:
+            node_major = "18"  # Fallback par défaut
         
         # Création du package.json
         package_json = {
@@ -118,7 +185,7 @@ class SimpleGenerator:
                 "dev": "node index.js"
             },
             "engines": {
-                "node": f">={version}.0.0"
+                "node": f">={node_major}.0.0"
             }
         }
         
@@ -159,11 +226,49 @@ class SimpleGenerator:
         
         return project_path
     
+    def _create_python_structure(self, project_path: str):
+        """Crée la structure Python standard (models, services, utils, tests, resources)"""
+        self.log_callback(f"📁 Création de la structure Python standard...")
+        
+        directories = ["models", "services", "utils", "tests", "resources"]
+        for directory in directories:
+            dir_path = os.path.join(project_path, directory)
+            os.makedirs(dir_path, exist_ok=True)
+            
+            # Créer un __init__.py dans chaque dossier
+            init_file = os.path.join(dir_path, "__init__.py")
+            with open(init_file, "w") as f:
+                f.write('"""Module {}"""\n'.format(directory))
+        
+        self.log_callback(f"✅ Structure créée : {', '.join(directories)}")
+    
+    def _copy_cursor_rules(self, project_path: str):
+        """Copie le pack de règles Cursor depuis le template"""
+        rules_source = os.path.expanduser("~/Developer/PYTHON/PROJETS/TEMPLATE/CursorRulesPack/cursor")
+        cursor_dest = os.path.join(project_path, ".cursor")
+        
+        if os.path.isdir(rules_source):
+            try:
+                if os.path.exists(cursor_dest):
+                    shutil.rmtree(cursor_dest)
+                shutil.copytree(rules_source, cursor_dest)
+                self.log_callback(f"✅ Pack de règles Cursor copié depuis TEMPLATE/CursorRulesPack")
+            except Exception as e:
+                self.log_callback(f"⚠️  Erreur lors de la copie des règles Cursor : {e}")
+                # Créer un dossier .cursor/rules vide en cas d'erreur
+                os.makedirs(os.path.join(project_path, ".cursor", "rules"), exist_ok=True)
+        else:
+            self.log_callback(f"⚠️  Pack CursorRulesPack introuvable dans {rules_source}")
+            self.log_callback(f"💡 Les règles ne seront pas copiées. Création d'un dossier .cursor/rules vide.")
+            # Créer un dossier .cursor/rules vide
+            os.makedirs(os.path.join(project_path, ".cursor", "rules"), exist_ok=True)
+    
     def _create_python_files(self, project_path: str, python_path: str):
         """Crée les fichiers Python de base"""
         
-        # main.py
-        main_content = f'''#!/usr/bin/env {python_path}
+        # main.py - Utiliser un shebang robuste
+        # Note: python_path peut contenir des espaces, donc on utilise python3 de manière générique
+        main_content = '''#!/usr/bin/env python3
 """
 Projet Python créé avec P_Creator
 """
@@ -254,6 +359,11 @@ python main.py
 ## 📁 Structure
 
 - `main.py` - Point d'entrée du projet
+- `models/` - Modèles de données
+- `services/` - Services métier
+- `utils/` - Utilitaires
+- `tests/` - Tests unitaires
+- `resources/` - Ressources (configs, données, etc.)
 - `requirements.txt` - Dépendances Python
 - `.venv/` - Environnement virtuel
 - `.gitignore` - Fichiers à ignorer par Git
@@ -636,30 +746,33 @@ echo ""
         if os.name != 'nt':
             os.chmod(script_path, 0o755)
     
-    def _activate_and_install_dependencies(self, project_path: str, venv_path: str, pip_path: str):
+    def _activate_and_install_dependencies(self, project_path: str, venv_path: str, python_path: str):
         """Active l'environnement virtuel et installe les dépendances"""
         try:
-            self.log_callback(f"🔧 Activation de l'environnement virtuel...")
+            self.log_callback(f"🔧 Configuration de l'environnement virtuel...")
             
-            # Mise à jour de pip
+            # Mise à jour de pip via python -m pip (plus fiable)
             self.log_callback(f"📦 Mise à jour de pip...")
-            subprocess.run([pip_path, "install", "--upgrade", "pip"], 
-                         check=True, cwd=project_path)
+            subprocess.run([python_path, "-m", "pip", "install", "--upgrade", "pip"], 
+                         check=True, cwd=project_path, timeout=120)
             
             # Installation des dépendances de base
             self.log_callback(f"📦 Installation des dépendances de base...")
             basic_deps = ["setuptools", "wheel"]
             for dep in basic_deps:
-                subprocess.run([pip_path, "install", dep], 
-                             check=True, cwd=project_path)
+                subprocess.run([python_path, "-m", "pip", "install", dep], 
+                             check=True, cwd=project_path, timeout=120)
             
-            self.log_callback(f"✅ Environnement virtuel activé et configuré !")
+            self.log_callback(f"✅ Environnement virtuel configuré !")
             self.log_callback(f"🎯 Votre projet est prêt à être utilisé !")
             
         except subprocess.CalledProcessError as e:
-            self.log_callback(f"⚠️  Erreur lors de l'activation : {e}")
-            self.log_callback(f"💡 Vous pouvez activer manuellement avec : source .venv/bin/activate")
+            self.log_callback(f"⚠️  Erreur lors de l'installation : {e}")
+            self.log_callback(f"💡 Vous pouvez installer manuellement avec : source .venv/bin/activate && pip install -r requirements.txt")
+        except subprocess.TimeoutExpired:
+            self.log_callback(f"⚠️  Timeout lors de l'installation")
+            self.log_callback(f"💡 Vous pouvez installer manuellement avec : source .venv/bin/activate && pip install -r requirements.txt")
         except Exception as e:
             self.log_callback(f"⚠️  Erreur inattendue : {e}")
-            self.log_callback(f"💡 Vous pouvez activer manuellement avec : source .venv/bin/activate")
+            self.log_callback(f"💡 Vous pouvez installer manuellement avec : source .venv/bin/activate && pip install -r requirements.txt")
 

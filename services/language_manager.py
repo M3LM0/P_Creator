@@ -1,6 +1,7 @@
 import subprocess
 import shutil
 import os
+import re
 
 class LanguageManager:
     SUPPORTED = {
@@ -8,6 +9,17 @@ class LanguageManager:
         "PHP": ["8.1", "8.2", "8.3"],
         "JavaScript": ["Node 18", "Node 20", "Node 22"]
     }
+    
+    @staticmethod
+    def _normalize_python_version(version_str: str) -> str:
+        """
+        Normalise une version Python en major.minor
+        Exemples: "3.13.0" -> "3.13", "3.9" -> "3.9", "3.10.5" -> "3.10"
+        """
+        match = re.search(r'^(\d+)\.(\d+)', version_str)
+        if match:
+            return f"{match.group(1)}.{match.group(2)}"
+        return version_str
 
     @staticmethod
     def _run(cmd, shell=False):
@@ -39,12 +51,15 @@ class LanguageManager:
     def is_version_installed(lang, version):
         try:
             if lang == "Python":
+                # Normaliser la version
+                normalized_version = LanguageManager._normalize_python_version(version)
+                
                 # Essayer plusieurs méthodes pour détecter Python
                 python_commands = [
-                    f"python{version[:3]}",  # python3.9
-                    f"python{version}",      # python3.9.24
-                    "python3",               # python3 (version par défaut)
-                    "python"                 # python (version par défaut)
+                    f"python{version}",           # python3.9.24
+                    f"python{normalized_version}", # python3.9
+                    "python3",                    # python3 (version par défaut)
+                    "python"                     # python (version par défaut)
                 ]
                 
                 for cmd in python_commands:
@@ -52,9 +67,10 @@ class LanguageManager:
                         result = subprocess.run([cmd, "--version"], 
                                               capture_output=True, text=True, timeout=5)
                         if result.returncode == 0:
+                            # Combiner stdout et stderr pour la détection
+                            output = (result.stdout or '') + (result.stderr or '')
                             # Vérifier que la version correspond
-                            version_output = result.stdout.strip()
-                            if version in version_output or version[:3] in version_output:
+                            if normalized_version in output or version in output:
                                 return True
                     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                         continue
@@ -89,8 +105,11 @@ class LanguageManager:
         """Retourne le chemin complet du binaire si la version est installée, sinon None."""
         try:
             if lang == "Python":
+                # Normaliser la version
+                normalized_version = LanguageManager._normalize_python_version(version)
+                
                 # 1️⃣ Vérifie dans Homebrew
-                brew_bin = f"/opt/homebrew/bin/python{version[:3]}"
+                brew_bin = f"/opt/homebrew/bin/python{normalized_version}"
                 if os.path.exists(brew_bin):
                     return brew_bin
 
@@ -98,18 +117,23 @@ class LanguageManager:
                 pyenv_root = os.path.expanduser("~/.pyenv/versions")
                 if os.path.isdir(pyenv_root):
                     for v in os.listdir(pyenv_root):
-                        if v.startswith(version):
+                        if v.startswith(normalized_version) or v.startswith(version):
                             bin_path = os.path.join(pyenv_root, v, "bin", "python")
                             if os.path.exists(bin_path):
                                 return bin_path
 
                 # 3️⃣ Vérifie dans /usr/local/bin
-                usr_bin = f"/usr/local/bin/python{version[:3]}"
+                usr_bin = f"/usr/local/bin/python{normalized_version}"
                 if os.path.exists(usr_bin):
                     return usr_bin
 
                 # 4️⃣ Vérifie dans le PATH
-                path = shutil.which(f"python{version[:3]}")
+                path = shutil.which(f"python{normalized_version}")
+                if path:
+                    return path
+                
+                # 5️⃣ Essayer aussi avec la version complète
+                path = shutil.which(f"python{version}")
                 if path:
                     return path
 

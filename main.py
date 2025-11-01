@@ -47,18 +47,26 @@ class MainWindow(QMainWindow):
         # Chemin du projet
         path_layout = QHBoxLayout()
         path_layout.addWidget(QLabel("Chemin :"))
-        self.path_input = QLineEdit(os.path.expanduser("~/Developer"))
+        self.path_input = QLineEdit(os.path.expanduser("~/Developer/PYTHON/PROJETS"))
         path_layout.addWidget(self.path_input)
         browse_btn = QPushButton("Parcourir")
         browse_btn.clicked.connect(self.browse_path)
         path_layout.addWidget(browse_btn)
         layout.addLayout(path_layout)
         
+        # Option pour copier les règles Cursor (uniquement pour Python)
+        self.cursor_rules_checkbox = QPushButton("✅ Copier les règles Cursor")
+        self.cursor_rules_checkbox.setCheckable(True)
+        self.cursor_rules_checkbox.setChecked(True)  # Activé par défaut
+        self.cursor_rules_checkbox.clicked.connect(self.toggle_cursor_rules_button)
+        layout.addWidget(self.cursor_rules_checkbox)
+        
         # Langage
         layout.addWidget(QLabel("Langage :"))
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["Python", "JavaScript", "PHP"])
         self.lang_combo.currentTextChanged.connect(self.update_versions)
+        self.lang_combo.currentTextChanged.connect(self.update_cursor_rules_visibility)
         layout.addWidget(self.lang_combo)
         
         # Version
@@ -85,6 +93,7 @@ class MainWindow(QMainWindow):
         
         # Initialisation
         self.update_versions()
+        self.update_cursor_rules_visibility()
 
     def browse_path(self):
         current_path = self.path_input.text()
@@ -360,6 +369,19 @@ class MainWindow(QMainWindow):
         else:
             self.status_label.setText("Prêt")
             self.status_label.setStyleSheet("")
+    
+    def update_cursor_rules_visibility(self):
+        """Affiche/masque l'option des règles Cursor selon le langage"""
+        language = self.lang_combo.currentText()
+        # Afficher uniquement pour Python
+        self.cursor_rules_checkbox.setVisible(language == "Python")
+    
+    def toggle_cursor_rules_button(self):
+        """Met à jour le texte du bouton selon l'état"""
+        if self.cursor_rules_checkbox.isChecked():
+            self.cursor_rules_checkbox.setText("✅ Copier les règles Cursor")
+        else:
+            self.cursor_rules_checkbox.setText("❌ Ne pas copier les règles Cursor")
 
     def create_project(self):
         name = self.name_input.text().strip()
@@ -379,10 +401,14 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            # Vérifier si les règles Cursor doivent être copiées
+            copy_cursor_rules = (language == "Python" and self.cursor_rules_checkbox.isChecked())
             
             self.log(f"🚀 Création du projet '{name}'...")
             self.log(f"📁 Chemin : {path}")
             self.log(f"🔧 Langage : {language} {version}")
+            if copy_cursor_rules:
+                self.log(f"📋 Règles Cursor : Oui")
             self.log("=" * 50)
             
             # Création du projet
@@ -390,7 +416,8 @@ class MainWindow(QMainWindow):
                 name=name,
                 path=path,
                 language=language,
-                version=version
+                version=version,
+                copy_cursor_rules=copy_cursor_rules
             )
             
             self.log("=" * 50)

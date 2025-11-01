@@ -27,6 +27,12 @@ wheels/
 *.egg
 MANIFEST
 
+# PyInstaller
+*.spec.bak
+*.spec~
+build/
+dist/
+
 # IDE
 .vscode/
 .idea/

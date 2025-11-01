@@ -23,7 +23,7 @@ source .venv/bin/activate
 # Installer PySide6 s'il n'est pas installé
 if ! python -c "import PySide6" 2>/dev/null; then
     echo "📥 Installation de PySide6..."
-    pip install PySide6
+    python -m pip install PySide6
 fi
 
 # Lancer l'application
